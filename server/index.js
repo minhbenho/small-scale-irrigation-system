@@ -1,19 +1,54 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
 const app = express();
 const PORT = 3000;
 
-// middleware để đọc JSON
 app.use(express.json());
 
-// POST endpoint
+const LOG_FILE = path.join(__dirname, 'logs.jsonl');
+
 app.post('/sensor-data', (req, res) => {
-  console.log('📩 ESP32 gửi lên:');
-  console.log(req.body);
+  const {
+    deviceId,
+    soilMoisture,
+    pumpState,
+    timestamp
+  } = req.body;
+
+  // ❗ validate tối thiểu (KHÔNG làm phức tạp)
+  if (!deviceId || !soilMoisture || !pumpState) {
+    return res.status(200).json({ ok: false, reason: 'missing fields' });
+  }
+
+  const logEntry = {
+    deviceId,
+    soilMoisture,
+    pumpState,
+    timestamp: timestamp || Date.now()
+  };
+
+  // append 1 dòng JSON
+  fs.appendFile(
+    LOG_FILE,
+    JSON.stringify(logEntry) + '\n',
+    (err) => {
+      if (err) {
+        console.error('❌ Write log error:', err);
+        // server KHÔNG crash
+      }
+    }
+  );
 
   res.status(200).json({ ok: true });
 });
 
-// chạy server
+app.post('/test', (req,res)=>{
+  res.send('ok');
+});
+
+
 app.listen(PORT, () => {
-  console.log(`🚀 Server đang chạy tại http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
