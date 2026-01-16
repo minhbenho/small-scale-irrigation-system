@@ -9,3 +9,4 @@ IrrigationConfig config{
 };
 const char*  WIFI_SSID="Wokwi-GUEST";
 const char*  WIFI_PASS="";
+extern const char*  deviceId="minh's_esp32";

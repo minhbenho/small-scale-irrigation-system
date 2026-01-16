@@ -11,3 +11,4 @@ struct IrrigationConfig{
 extern IrrigationConfig config;
 extern const char*  WIFI_SSID;
 extern const char*  WIFI_PASS;
+extern const char*  deviceId;
