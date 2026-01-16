@@ -48,6 +48,20 @@ app.post('/test', (req,res)=>{
   res.send('ok');
 });
 
+app.get('/config',(req,res)=>{
+  const deviceId=req.query.deviceId;
+  if(!deviceId){
+    return res.status(400).json({ok: false});
+  }
+  // config tĩnh, sau này có dtb sẽ fix lại
+  const config={
+    thresholdDry: 1400,
+    thresholdWet: 1800,
+    pumpDurationMs: 2000,
+    cooldownMs: 5000
+  };
+  res.status(200).json(config);
+})
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
