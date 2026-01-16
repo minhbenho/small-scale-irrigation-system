@@ -9,3 +9,4 @@
 {"deviceId":"minh's_esp32","soilMoisture":4095,"pumpState":"IDLE","timestamp":1768530877800}
 {"deviceId":"minh's_esp32","soilMoisture":4095,"pumpState":"IDLE","timestamp":1768530893293}
 {"deviceId":"minh's_esp32","soilMoisture":4095,"pumpState":"IDLE","timestamp":1768531134759}
+{"deviceId":"minh's_esp32","soilMoisture":4095,"pumpState":"WATERING","timestamp":1768534572796}
