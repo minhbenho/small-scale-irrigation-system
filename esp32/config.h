@@ -5,6 +5,7 @@ struct IrrigationConfig{
   int wetThreshold;
   unsigned long minWaterTime;
   unsigned long maxWaterTime;
+  unsigned long cooldownTime;
 };
 
 extern IrrigationConfig currentConfig;

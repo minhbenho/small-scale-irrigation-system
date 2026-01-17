@@ -84,7 +84,8 @@ bool parseConfigJson(const String& payload, IrrigationConfig& out) {
 
   if (!doc.containsKey("thresholdDry") ||
       !doc.containsKey("thresholdWet") ||
-      !doc.containsKey("pumpDurationMs") ||
+      !doc.containsKey("minWaterTime") ||
+      !doc.containsKey("maxWaterTime") ||
       !doc.containsKey("cooldownMs")) {
     Serial.println(MISSING_CONFIG_FIELDS);
     return false;
@@ -92,8 +93,9 @@ bool parseConfigJson(const String& payload, IrrigationConfig& out) {
 
   out.dryThreshold = doc["thresholdDry"];
   out.wetThreshold = doc["thresholdWet"];
-  out.minWaterTime = doc["pumpDurationMs"];
-  out.maxWaterTime = doc["cooldownMs"];
+  out.minWaterTime = doc["minWaterTime"];
+  out.maxWaterTime  = doc["maxWaterTime"];
+  out.cooldownTime  = doc["cooldownMs"];
 
   return true;
 }
@@ -121,7 +123,6 @@ void configProcess(const String& payload) {
 // ===== MAIN PROCESS =====
 void httpProcess(unsigned long now, int soilValue) {
   if (!wifiConnected()) return;
-
   postF(now, soilValue);
   getConfig(now);
 }

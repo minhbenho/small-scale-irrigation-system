@@ -57,7 +57,8 @@ app.get('/config',(req,res)=>{
   const config={
     thresholdDry: 1400,
     thresholdWet: 1800,
-    pumpDurationMs: 2000,
+    minWaterTime: 2000,
+    maxWaterTime: 5000,
     cooldownMs: 5000
   };
   res.status(200).json(config);

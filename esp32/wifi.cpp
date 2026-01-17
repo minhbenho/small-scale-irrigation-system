@@ -37,5 +37,5 @@ bool wifiProcess(unsigned long now){
 }
 
 bool wifiConnected(){
-  return wifiState == WIFI_CONNECTED;
+  return WiFi.status() == WL_CONNECTED;
 }
