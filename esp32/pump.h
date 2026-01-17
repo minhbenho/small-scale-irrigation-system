@@ -1,11 +1,8 @@
 // pump.h
 #pragma once
 #include "config.h"
+#include "system_state.h"
 
-enum SystemState{
-  IDLE,
-  WATERING
-};
 
 void pumpInit();
 void pumpProcess(unsigned long now, int soilValue);

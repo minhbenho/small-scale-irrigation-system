@@ -1,7 +1,9 @@
 // pump.cpp
 #include "pump.h"
 #include "message.h"
+#include "system_state.h"
 #include <Arduino.h>
+#include "config.h"
 
 #define PUMP_PIN 2
 
@@ -16,7 +18,7 @@ void pumpInit(){
 void pumpProcess(unsigned long now, int soilValue){
   switch(currentState){
     case IDLE:
-      if(soilValue < config.dryThreshold){
+      if(soilValue < currentConfig.dryThreshold){
         currentState = WATERING;
         waterStartTime = now;
         Serial.println(START_WATER);
@@ -24,9 +26,9 @@ void pumpProcess(unsigned long now, int soilValue){
       break;
 
     case WATERING:
-      if((soilValue > config.wetThreshold &&
-          now - waterStartTime >= config.minWaterTime) ||
-          now - waterStartTime > config.maxWaterTime){
+      if((soilValue > currentConfig.wetThreshold &&
+          now - waterStartTime >= currentConfig.minWaterTime) ||
+          now - waterStartTime > currentConfig.maxWaterTime){
         currentState = IDLE;
         Serial.println(STOP_WATER);
       }
