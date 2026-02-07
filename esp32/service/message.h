@@ -1,4 +1,5 @@
 // message.h
+
 #pragma once
 
 extern const char* START_WATER;
@@ -24,3 +25,5 @@ extern const char* CONFIG_PARSE_FAILED;
 extern const char* CONFIG_VALIDATION_FAILED;
 extern const char* CONFIG_APPLIED;
 extern const char* CONFIG_SWITCHED;
+
+extern const char* DANGEROUS_WATER_TIME;

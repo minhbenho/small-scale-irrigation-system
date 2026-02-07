@@ -1,3 +1,5 @@
+//http.cpp
+
 #include "http.h"
 #include "wifi.h"
 #include "pump.h"
@@ -11,7 +13,7 @@ void configProcess(const String& payload);
 bool parseConfigJson(const String& payload, IrrigationConfig& out);
 
 // ===== ENDPOINT =====
-static const char* mainEndpoint = "https://reproduce-cowboy-jul-exhaust.trycloudflare.com";
+static const char* mainEndpoint = "https://recordings-leslie-trend-intelligence.trycloudflare.com";
 static const char* POST_PATH   = "/sensor-data";
 static const char* GET_PATH    = "/config";
 
@@ -84,16 +86,18 @@ bool parseConfigJson(const String& payload, IrrigationConfig& out) {
 
   if (!doc.containsKey("thresholdDry") ||
       !doc.containsKey("thresholdWet") ||
-      !doc.containsKey("pumpDurationMs") ||
-      !doc.containsKey("cooldownMs")) {
+      !doc.containsKey("minWaterTime") ||
+      !doc.containsKey("maxWaterTime") ||
+      /*!doc.containsKey("cooldownMs")*/) {
     Serial.println(MISSING_CONFIG_FIELDS);
     return false;
   }
 
   out.dryThreshold = doc["thresholdDry"];
   out.wetThreshold = doc["thresholdWet"];
-  out.minWaterTime = doc["pumpDurationMs"];
-  out.maxWaterTime = doc["cooldownMs"];
+  out.minWaterTime = doc["minWaterTime"];
+  out.maxWaterTime  = doc["maxWaterTime"];
+  //out.cooldownTime  = doc["cooldownMs"];
 
   return true;
 }
@@ -113,6 +117,9 @@ void configProcess(const String& payload) {
   }
 
   incomingConfig = newConfig;
+  if(incomingConfig.maxWaterTime>PUMP_MAX_WATER_TIME){
+    Serial.println(DANGEROUS_WATER_TIME);
+  }
   hasIncomingConfig = true;
 
   Serial.println(CONFIG_APPLIED);
@@ -121,7 +128,6 @@ void configProcess(const String& payload) {
 // ===== MAIN PROCESS =====
 void httpProcess(unsigned long now, int soilValue) {
   if (!wifiConnected()) return;
-
   postF(now, soilValue);
   getConfig(now);
 }

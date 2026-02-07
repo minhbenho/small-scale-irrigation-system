@@ -1,4 +1,5 @@
 // wifi.cpp
+
 #include "wifi.h"
 #include "config.h"
 #include <WiFi.h>
@@ -37,5 +38,5 @@ bool wifiProcess(unsigned long now){
 }
 
 bool wifiConnected(){
-  return wifiState == WIFI_CONNECTED;
+  return WiFi.status() == WL_CONNECTED;
 }
