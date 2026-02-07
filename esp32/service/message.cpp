@@ -1,4 +1,5 @@
 // message.cpp
+
 #include "message.h"
 
 const char* START_WATER = "bat dau bom";
@@ -24,3 +25,4 @@ const char* CONFIG_PARSE_FAILED    = "❌ Config parse failed";
 const char* CONFIG_VALIDATION_FAILED = "❌ Config validation failed";
 const char* CONFIG_APPLIED         = "✅ Config applied";
 const char* CONFIG_SWITCHED = "✅ CONFIG SWITCHED";
+const char* DANGEROUS_WATER_TIME="Thoi gian bom setup toi da dang vuot qua tai! Nguy hiem!";

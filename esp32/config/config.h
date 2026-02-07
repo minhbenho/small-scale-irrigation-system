@@ -1,3 +1,5 @@
+// config.h
+
 #pragma once
 
 struct IrrigationConfig{
@@ -17,3 +19,4 @@ bool validateConfig(const IrrigationConfig& cfg);
 extern const char* WIFI_SSID;
 extern const char* WIFI_PASS;
 extern const char* deviceId;
+extern const unsigned long pumpMaxWaterTime=5000;

@@ -59,7 +59,7 @@ app.get('/config',(req,res)=>{
     thresholdWet: 1800,
     minWaterTime: 2000,
     maxWaterTime: 5000,
-    cooldownMs: 5000
+    //cooldownMs: 5000
   };
   res.status(200).json(config);
 })
