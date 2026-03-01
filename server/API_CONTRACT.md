@@ -320,6 +320,125 @@ Headers: {
 
 ---
 
+## 6️⃣ IOT DEVICE ENDPOINTS (ESP32)
+
+ESP32 **không dùng JWT**. Dùng headers:
+
+```http
+X-Device-Code: esp32-01
+X-Device-Secret: abc123
+```
+
+Hoặc sau khi provision token:
+
+```http
+X-Device-Code: esp32-01
+X-Device-Token: <device_token>
+```
+
+### POST /api/iot/heartbeat
+
+**Request**:
+
+```json
+{
+  "fwVersion": "1.0.0",
+  "ip": "192.168.1.10"
+}
+```
+
+**Response** *(200)*:
+
+```json
+{
+  "ok": true,
+  "serverTime": "2026-02-28T01:00:00Z"
+}
+```
+
+### POST /api/iot/irrigations
+
+**Request**:
+
+```json
+{
+  "startedAt": "2026-02-28T01:10:00Z",
+  "endedAt": "2026-02-28T01:12:00Z",
+  "durationSec": 120,
+  "moistureBefore": 32,
+  "moistureAfter": 48,
+  "reason": "AUTO"
+}
+```
+
+**Response** *(200)*:
+
+```json
+{
+  "ok": true,
+  "logId": 123
+}
+```
+
+### GET /api/iot/config
+
+**Response** *(200)*:
+
+```json
+{
+  "thresholdMoisture": 45,
+  "mode": "AUTO",
+  "minPumpOffSec": 300,
+  "maxPumpOnSec": 120
+}
+```
+
+### GET /api/iot/commands?ack=true
+
+`ack=true` nghĩa là server đánh dấu lệnh `DELIVERED` khi trả về.
+
+**Response có lệnh** *(200)*:
+
+```json
+{
+  "command": {
+    "id": "cmd_01",
+    "type": "PUMP_ON",
+    "durationSec": 60,
+    "issuedAt": "2026-02-28T01:05:00Z"
+  }
+}
+```
+
+**Response không có lệnh** *(200)*:
+
+```json
+{
+  "command": null
+}
+```
+
+### POST /api/iot/commands/:commandId/result
+
+**Request**:
+
+```json
+{
+  "status": "DONE",
+  "detail": "pump ran 60s"
+}
+```
+
+**Response** *(200)*:
+
+```json
+{
+  "ok": true
+}
+```
+
+---
+
 ## ❌ ERROR RESPONSES
 
 ### 400 Bad Request

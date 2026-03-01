@@ -1,32 +1,27 @@
-// Mock data store
-const devicesStore = [
-  {
-    id: "dev-001",
-    userId: "user-123",
-    deviceCode: "esp32-01",
-    displayName: "Chậu lan",
-    thresholdMoisture: 40,
-    online: true,
-    lastSeenAt: "2026-02-28T08:30:00Z",
-    isActive: true,
-    createdAt: "2026-02-20T10:00:00Z",
-  },
-];
+import {
+  addDevice as addDeviceService,
+  createCommandForDevice,
+  deleteDeviceByOwner,
+  getIrrigationsForDevice,
+  getOwnedDevice,
+  getStatsForDevice,
+  listCommandsForDevice,
+  listDevicesByUser,
+  toDeviceView,
+  updateDeviceByOwner,
+} from "../services/devices.service.js";
 
 // GET /api/devices
 export const listDevices = (req, res) => {
   const userId = req.user.id;
-  const devices = devicesStore.filter((d) => d.userId === userId);
-
-  res.status(200).json(devices);
+  const items = listDevicesByUser(userId);
+  return res.status(200).json(items);
 };
 
 // POST /api/devices
 export const addDevice = (req, res) => {
-  const { deviceCode, displayName, deviceSecret, thresholdMoisture } =
-    req.body;
+  const { deviceCode, displayName, deviceSecret } = req.body;
 
-  // Validate
   if (!deviceCode || !displayName || !deviceSecret) {
     return res.status(400).json({
       message: "deviceCode, displayName, and deviceSecret are required",
@@ -34,21 +29,17 @@ export const addDevice = (req, res) => {
     });
   }
 
-  const newDevice = {
-    id: "dev-" + Date.now(),
-    userId: req.user.id,
-    deviceCode,
-    displayName,
-    thresholdMoisture: thresholdMoisture || 40,
-    online: false,
-    lastSeenAt: null,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  };
+  let newDevice;
+  try {
+    newDevice = addDeviceService(req.user.id, req.body);
+  } catch (error) {
+    return res.status(409).json({
+      message: error.message,
+      code: error.code || "CONFLICT",
+    });
+  }
 
-  devicesStore.push(newDevice);
-
-  res.status(201).json({
+  return res.status(201).json({
     id: newDevice.id,
     deviceCode: newDevice.deviceCode,
   });
@@ -57,11 +48,7 @@ export const addDevice = (req, res) => {
 // PATCH /api/devices/:deviceId
 export const updateDevice = (req, res) => {
   const { deviceId } = req.params;
-  const { displayName, thresholdMoisture, isActive } = req.body;
-
-  const device = devicesStore.find(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
+  const device = updateDeviceByOwner(req.user.id, deviceId, req.body);
 
   if (!device) {
     return res.status(404).json({
@@ -70,38 +57,22 @@ export const updateDevice = (req, res) => {
     });
   }
 
-  if (displayName !== undefined) device.displayName = displayName;
-  if (thresholdMoisture !== undefined)
-    device.thresholdMoisture = thresholdMoisture;
-  if (isActive !== undefined) device.isActive = isActive;
-
-  res.status(200).json({
-    id: device.id,
-    deviceCode: device.deviceCode,
-    displayName: device.displayName,
-    thresholdMoisture: device.thresholdMoisture,
-    isActive: device.isActive,
-  });
+  return res.status(200).json(toDeviceView(device));
 };
 
 // DELETE /api/devices/:deviceId
 export const deleteDevice = (req, res) => {
   const { deviceId } = req.params;
 
-  const index = devicesStore.findIndex(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
-
-  if (index === -1) {
+  const deleted = deleteDeviceByOwner(req.user.id, deviceId);
+  if (!deleted) {
     return res.status(404).json({
       message: "Device not found",
       code: "NOT_FOUND",
     });
   }
 
-  devicesStore.splice(index, 1);
-
-  res.status(200).json({
+  return res.status(200).json({
     message: "Device deleted successfully",
   });
 };
@@ -111,9 +82,7 @@ export const listIrrigations = (req, res) => {
   const { deviceId } = req.params;
   const { limit = 50, offset = 0 } = req.query;
 
-  const device = devicesStore.find(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
+  const device = getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -122,33 +91,14 @@ export const listIrrigations = (req, res) => {
     });
   }
 
-  // Mock irrigations
-  const mockIrrigations = [
-    {
-      id: 123,
-      startedAt: "2026-02-28T01:10:00Z",
-      endedAt: "2026-02-28T01:12:00Z",
-      durationSec: 120,
-      moistureBefore: 32,
-      moistureAfter: 48,
-      reason: "AUTO",
-    },
-    {
-      id: 122,
-      startedAt: "2026-02-27T06:00:00Z",
-      endedAt: "2026-02-27T06:02:30Z",
-      durationSec: 150,
-      moistureBefore: 28,
-      moistureAfter: 52,
-      reason: "AUTO",
-    },
-  ];
+  const all = getIrrigationsForDevice(device.id);
+  const safeOffset = Number(offset) || 0;
+  const safeLimit = Number(limit) || 50;
+  const items = all.slice(safeOffset, safeOffset + safeLimit);
 
-  const items = mockIrrigations.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
-
-  res.status(200).json({
+  return res.status(200).json({
     items,
-    total: mockIrrigations.length,
+    total: all.length,
   });
 };
 
@@ -157,9 +107,7 @@ export const getStats = (req, res) => {
   const { deviceId } = req.params;
   const { range = "week", metric = "duration" } = req.query;
 
-  const device = devicesStore.find(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
+  const device = getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -168,34 +116,7 @@ export const getStats = (req, res) => {
     });
   }
 
-  // Mock stats data
-  const mockSeries =
-    metric === "duration"
-      ? [
-          { bucket: "2026-02-22", value: 12.5 },
-          { bucket: "2026-02-23", value: 0 },
-          { bucket: "2026-02-24", value: 8.0 },
-          { bucket: "2026-02-25", value: 15.3 },
-          { bucket: "2026-02-26", value: 10.0 },
-          { bucket: "2026-02-27", value: 9.5 },
-          { bucket: "2026-02-28", value: 2.0 },
-        ]
-      : [
-          { bucket: "2026-02-22", value: 3 },
-          { bucket: "2026-02-23", value: 0 },
-          { bucket: "2026-02-24", value: 2 },
-          { bucket: "2026-02-25", value: 4 },
-          { bucket: "2026-02-26", value: 2 },
-          { bucket: "2026-02-27", value: 2 },
-          { bucket: "2026-02-28", value: 1 },
-        ];
-
-  res.status(200).json({
-    range,
-    metric,
-    unit: metric === "duration" ? "minutes" : "count",
-    series: mockSeries,
-  });
+  return res.status(200).json(getStatsForDevice(device.id, range, metric));
 };
 
 // POST /api/devices/:deviceId/commands
@@ -203,9 +124,7 @@ export const createCommand = (req, res) => {
   const { deviceId } = req.params;
   const { type, durationSec } = req.body;
 
-  const device = devicesStore.find(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
+  const device = getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -221,10 +140,10 @@ export const createCommand = (req, res) => {
     });
   }
 
-  const commandId = "cmd-" + Date.now();
+  const command = createCommandForDevice(device.id, { type, durationSec });
 
-  res.status(201).json({
-    commandId,
+  return res.status(201).json({
+    commandId: command.id,
     status: "QUEUED",
   });
 };
@@ -234,9 +153,7 @@ export const listCommands = (req, res) => {
   const { deviceId } = req.params;
   const { status } = req.query;
 
-  const device = devicesStore.find(
-    (d) => d.id === deviceId && d.userId === req.user.id
-  );
+  const device = getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -245,28 +162,5 @@ export const listCommands = (req, res) => {
     });
   }
 
-  // Mock commands
-  const mockCommands = [
-    {
-      id: "cmd-001",
-      type: "PUMP_ON",
-      durationSec: 60,
-      status: "COMPLETED",
-      createdAt: "2026-02-28T07:00:00Z",
-      completedAt: "2026-02-28T07:01:00Z",
-    },
-    {
-      id: "cmd-002",
-      type: "PUMP_ON",
-      durationSec: 120,
-      status: "QUEUED",
-      createdAt: "2026-02-28T08:00:00Z",
-    },
-  ];
-
-  const filtered = status
-    ? mockCommands.filter((c) => c.status === status)
-    : mockCommands;
-
-  res.status(200).json(filtered);
+  return res.status(200).json(listCommandsForDevice(device.id, status));
 };

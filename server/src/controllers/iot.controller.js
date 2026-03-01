@@ -1,71 +1,59 @@
-// Mock controller cho IoT devices
+import {
+  updateHeartbeat,
+  saveIrrigation,
+  pullConfig,
+  pullCommand as pullCommandService,
+  saveCommandResult,
+} from "../services/iot.service.js";
+
 export const heartbeat = (req, res) => {
-  const { soilMoisture, temperature } = req.body;
-  res.json({
-    success: true,
-    message: "Heartbeat received",
-    data: {
-      deviceId: req.device.id,
-      soilMoisture,
-      temperature,
-      timestamp: new Date().toISOString(),
-    },
-  });
+  const payload = updateHeartbeat(req.device, req.body);
+  return res.status(200).json(payload);
 };
 
 export const pushIrrigation = (req, res) => {
-  const { soilMoisture, temperature, duration } = req.body;
-  res.status(201).json({
-    success: true,
-    message: "Irrigation data recorded",
-    irrigation: {
-      id: "irr-" + Date.now(),
-      deviceId: req.device.id,
-      soilMoisture,
-      temperature,
-      duration,
-      timestamp: new Date().toISOString(),
-    },
+  const { startedAt, endedAt, durationSec } = req.body;
+
+  if (!durationSec) {
+    return res.status(400).json({
+      ok: false,
+      code: "INVALID_REQUEST",
+      message: "durationSec is required",
+    });
+  }
+
+  const result = saveIrrigation(req.device, {
+    startedAt,
+    endedAt,
+    durationSec,
+    moistureBefore: req.body.moistureBefore,
+    moistureAfter: req.body.moistureAfter,
+    reason: req.body.reason,
   });
+
+  return res.status(200).json(result);
 };
 
 export const getConfig = (req, res) => {
-  res.json({
-    config: {
-      deviceId: req.device.id,
-      soilMoistureThreshold: 30,
-      checkInterval: 300, // 5 minutes
-      irrigationDuration: 120, // 2 minutes
-      updatedAt: "2026-02-28T00:00:00Z",
-    },
-  });
+  return res.status(200).json(pullConfig(req.device));
 };
 
 export const pullCommand = (req, res) => {
-  res.json({
-    commands: [
-      {
-        id: "cmd-" + Date.now(),
-        deviceId: req.device.id,
-        action: "irrigate",
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  });
+  const ack = String(req.query.ack || "false").toLowerCase() === "true";
+  return res.status(200).json(pullCommandService(req.device, ack));
 };
 
 export const commandResult = (req, res) => {
   const { commandId } = req.params;
-  const { status, result } = req.body;
-  res.json({
-    success: true,
-    message: "Command result recorded",
-    command: {
-      id: commandId,
-      deviceId: req.device.id,
-      status: status || "completed",
-      result,
-      completedAt: new Date().toISOString(),
-    },
-  });
+  const result = saveCommandResult(req.device, commandId, req.body);
+
+  if (result.notFound) {
+    return res.status(404).json({
+      ok: false,
+      code: "NOT_FOUND",
+      message: "Command not found",
+    });
+  }
+
+  return res.status(200).json({ ok: true });
 };
