@@ -1,5 +1,5 @@
 import express from "express";
-import { pool, checkDb } from "./db.js";
+import { pool, checkDb, initializeDb } from "./db.js";
 import { createApp } from "./app.js";
 
 const app = createApp();
@@ -12,15 +12,15 @@ app.get("/health", async (req, res) => {
 
 // Database test endpoints (optional)
 app.get("/users", async (req, res) => {
-  const r = await pool.query("SELECT id, name FROM users ORDER BY id DESC");
+  const r = await pool.query("SELECT id, name, email FROM users ORDER BY id DESC");
   res.json(r.rows);
 });
 
 app.post("/users", async (req, res) => {
   const { name } = req.body;
   const r = await pool.query(
-    "INSERT INTO users(name) VALUES($1) RETURNING id, name",
-    [name]
+    "INSERT INTO users(name, email, password_hash) VALUES($1, $2, $3) RETURNING id, name",
+    [name, `${name}@test.local`, "hash"]
   );
   res.status(201).json(r.rows[0]);
 });
@@ -28,5 +28,6 @@ app.post("/users", async (req, res) => {
 const PORT = 3000;
 app.listen(PORT, async () => {
   console.log(`Server listening on http://localhost:${PORT}`);
+  await initializeDb();
   await checkDb();
 });

@@ -6,12 +6,18 @@ import {
   saveCommandResult,
 } from "../services/iot.service.js";
 
-export const heartbeat = (req, res) => {
-  const payload = updateHeartbeat(req.device, req.body);
+export const heartbeat = async (req, res) => {
+  try {
+    const payload = await updateHeartbeat(req.device, req.body);
   return res.status(200).json(payload);
+  } catch (error) {
+    console.error("[IoT Controller] Heartbeat error:", error.message);
+    return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  }
 };
 
-export const pushIrrigation = (req, res) => {
+export const pushIrrigation = async (req, res) => {
+  try {
   const { startedAt, endedAt, durationSec } = req.body;
 
   if (!durationSec) {
@@ -22,7 +28,7 @@ export const pushIrrigation = (req, res) => {
     });
   }
 
-  const result = saveIrrigation(req.device, {
+    const result = await saveIrrigation(req.device, {
     startedAt,
     endedAt,
     durationSec,
@@ -32,20 +38,37 @@ export const pushIrrigation = (req, res) => {
   });
 
   return res.status(200).json(result);
+  } catch (error) {
+    console.error("[IoT Controller] Push irrigation error:", error.message);
+    return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  }
 };
 
-export const getConfig = (req, res) => {
-  return res.status(200).json(pullConfig(req.device));
+export const getConfig = async (req, res) => {
+  try {
+    const config = await pullConfig(req.device);
+    return res.status(200).json(config);
+  } catch (error) {
+    console.error("[IoT Controller] Get config error:", error.message);
+    return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  }
 };
 
-export const pullCommand = (req, res) => {
+export const pullCommand = async (req, res) => {
+  try {
   const ack = String(req.query.ack || "false").toLowerCase() === "true";
-  return res.status(200).json(pullCommandService(req.device, ack));
+    const result = await pullCommandService(req.device, ack);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("[IoT Controller] Pull command error:", error.message);
+    return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  }
 };
 
-export const commandResult = (req, res) => {
+export const commandResult = async (req, res) => {
+  try {
   const { commandId } = req.params;
-  const result = saveCommandResult(req.device, commandId, req.body);
+    const result = await saveCommandResult(req.device, commandId, req.body);
 
   if (result.notFound) {
     return res.status(404).json({
@@ -56,4 +79,8 @@ export const commandResult = (req, res) => {
   }
 
   return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("[IoT Controller] Command result error:", error.message);
+    return res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  }
 };

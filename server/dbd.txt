@@ -1,0 +1,86 @@
+tuoicay=# \dt
+               List of tables
+ Schema |      Name       | Type  |  Owner
+--------+-----------------+-------+----------
+ public | device_status   | table | postgres
+ public | devices         | table | postgres
+ public | irrigation_logs | table | postgres
+ public | users           | table | postgres
+(4 rows)
+
+
+tuoicay=# \d device_status
+                       Table "public.device_status"
+    Column    |           Type           | Collation | Nullable | Default
+--------------+--------------------------+-----------+----------+---------
+ device_id    | uuid                     |           | not null |
+ last_seen_at | timestamp with time zone |           | not null |
+ ip           | inet                     |           |          |
+ fw_version   | text                     |           |          |
+ updated_at   | timestamp with time zone |           | not null | now()
+Indexes:
+    "device_status_pkey" PRIMARY KEY, btree (device_id)
+    "idx_device_status_last_seen" btree (last_seen_at)
+Foreign-key constraints:
+    "device_status_device_id_fkey" FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+
+
+tuoicay=# \d devices
+                                  Table "public.devices"
+       Column       |           Type           | Collation | Nullable |      Default
+--------------------+--------------------------+-----------+----------+-------------------
+ id                 | uuid                     |           | not null | gen_random_uuid()
+ user_id            | uuid                     |           | not null |
+ device_code        | text                     |           | not null |
+ display_name       | text                     |           | not null |
+ device_secret_hash | text                     |           | not null |
+ threshold_moisture | integer                  |           | not null | 40
+ is_active          | boolean                  |           | not null | true
+ created_at         | timestamp with time zone |           | not null | now()
+Indexes:
+    "devices_pkey" PRIMARY KEY, btree (id)
+    "devices_device_code_key" UNIQUE CONSTRAINT, btree (device_code)
+    "idx_devices_user_id" btree (user_id)
+Foreign-key constraints:
+    "devices_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "device_status" CONSTRAINT "device_status_device_id_fkey" FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+    TABLE "irrigation_logs" CONSTRAINT "irrigation_logs_device_id_fkey" FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+
+
+tuoicay=# \d irrigation_logs
+                                         Table "public.irrigation_logs"
+     Column      |           Type           | Collation | Nullable |                   Default
+-----------------+--------------------------+-----------+----------+---------------------------------------------
+ id              | bigint                   |           | not null | nextval('irrigation_logs_id_seq'::regclass)
+ device_id       | uuid                     |           | not null |
+ started_at      | timestamp with time zone |           | not null |
+ ended_at        | timestamp with time zone |           | not null |
+ duration_sec    | integer                  |           | not null |
+ moisture_before | integer                  |           |          |
+ moisture_after  | integer                  |           |          |
+ reason          | text                     |           | not null | 'AUTO'::text
+ created_at      | timestamp with time zone |           | not null | now()
+Indexes:
+    "irrigation_logs_pkey" PRIMARY KEY, btree (id)
+    "idx_irrigation_device_time" btree (device_id, started_at DESC)
+Check constraints:
+    "irrigation_logs_duration_sec_check" CHECK (duration_sec >= 0)
+Foreign-key constraints:
+    "irrigation_logs_device_id_fkey" FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+
+
+tuoicay=# \d users
+                                Table "public.users"
+    Column     |           Type           | Collation | Nullable |      Default
+---------------+--------------------------+-----------+----------+-------------------
+ id            | uuid                     |           | not null | gen_random_uuid()
+ email         | text                     |           | not null |
+ password_hash | text                     |           | not null |
+ name          | text                     |           |          |
+ created_at    | timestamp with time zone |           | not null | now()
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+    "users_email_key" UNIQUE CONSTRAINT, btree (email)
+Referenced by:
+    TABLE "devices" CONSTRAINT "devices_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

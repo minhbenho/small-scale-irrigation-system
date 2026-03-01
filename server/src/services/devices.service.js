@@ -1,28 +1,7 @@
 import { hashSecret } from "../utils/hash.js";
+import { pool } from "../db.js";
 
 const ONLINE_TTL_MS = 90 * 1000;
-
-const devicesStore = [
-	{
-		id: "dev-001",
-		userId: "user-123",
-		deviceCode: "esp32-01",
-		displayName: "Chậu lan",
-		secretHash: hashSecret("abc123"),
-		tokenHash: null,
-		thresholdMoisture: 45,
-		mode: "AUTO",
-		minPumpOffSec: 300,
-		maxPumpOnSec: 120,
-		isActive: true,
-		lastSeenAt: null,
-		createdAt: "2026-02-20T10:00:00Z",
-	},
-];
-
-const commandsStore = [];
-const irrigationsStore = [];
-let irrigationIdSeq = 1;
 
 function toIsoOrNow(value) {
 	if (!value) {
@@ -46,33 +25,65 @@ export function isOnline(lastSeenAt) {
 export function toDeviceView(device) {
 	return {
 		id: device.id,
-		userId: device.userId,
-		deviceCode: device.deviceCode,
-		displayName: device.displayName,
-		thresholdMoisture: device.thresholdMoisture,
+		userId: device.user_id,
+		deviceCode: device.device_code,
+		displayName: device.display_name,
+		thresholdMoisture: device.threshold_moisture,
 		mode: device.mode,
-		minPumpOffSec: device.minPumpOffSec,
-		maxPumpOnSec: device.maxPumpOnSec,
-		online: isOnline(device.lastSeenAt),
-		lastSeenAt: device.lastSeenAt,
-		isActive: device.isActive,
-		createdAt: device.createdAt,
+		minPumpOffSec: device.min_pump_off_sec,
+		maxPumpOnSec: device.max_pump_on_sec,
+		online: isOnline(device.last_seen_at),
+		lastSeenAt: device.last_seen_at,
+		isActive: device.is_active,
+		createdAt: device.created_at,
 	};
 }
 
-export function getDeviceByCode(deviceCode) {
-	return devicesStore.find((d) => d.deviceCode === deviceCode) || null;
+export async function getDeviceByCode(deviceCode) {
+	try {
+		const result = await pool.query(
+			"SELECT id, user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec, is_active, created_at FROM devices WHERE device_code = $1",
+			[deviceCode]
+		);
+		return result.rows[0] || null;
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function getDeviceById(deviceId) {
-	return devicesStore.find((d) => d.id === deviceId) || null;
+export async function getDeviceById(deviceId) {
+	try {
+		const result = await pool.query(
+			"SELECT id, user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec, is_active, created_at FROM devices WHERE id = $1",
+			[deviceId]
+		);
+		const device = result.rows[0];
+		if (device) {
+			const statusResult = await pool.query(
+				"SELECT last_seen_at FROM device_status WHERE device_id = $1",
+				[deviceId]
+			);
+			device.last_seen_at = statusResult.rows[0]?.last_seen_at || null;
+		}
+		return device || null;
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function listDevicesByUser(userId) {
-	return devicesStore.filter((d) => d.userId === userId).map(toDeviceView);
+export async function listDevicesByUser(userId) {
+	try {
+		const result = await pool.query(
+			"SELECT d.id, d.user_id, d.device_code, d.display_name, d.device_secret_hash, d.threshold_moisture, d.mode, d.min_pump_off_sec, d.max_pump_on_sec, d.is_active, d.created_at, ds.last_seen_at FROM devices d LEFT JOIN device_status ds ON d.id = ds.device_id WHERE d.user_id = $1 ORDER BY d.created_at DESC",
+			[userId]
+		);
+		return result.rows.map(toDeviceView);
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function addDevice(userId, payload) {
+export async function addDevice(userId, payload) {
 	const {
 		deviceCode,
 		displayName,
@@ -83,124 +94,207 @@ export function addDevice(userId, payload) {
 		maxPumpOnSec = 120,
 	} = payload;
 
-	const exists = getDeviceByCode(deviceCode);
-	if (exists) {
-		const error = new Error("Device code already exists");
-		error.code = "CONFLICT";
+	try {
+		// Check if device code already exists
+		const existing = await pool.query(
+			"SELECT id FROM devices WHERE device_code = $1",
+			[deviceCode]
+		);
+		if (existing.rows.length > 0) {
+			const error = new Error("Device code already exists");
+			error.code = "CONFLICT";
+			throw error;
+		}
+
+		const result = await pool.query(
+			"INSERT INTO devices(user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec) VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec, is_active, created_at",
+			[userId, deviceCode, displayName, hashSecret(deviceSecret), thresholdMoisture, mode, minPumpOffSec, maxPumpOnSec]
+		);
+
+		const device = result.rows[0];
+		return device;
+	} catch (error) {
 		throw error;
 	}
-
-	const now = new Date().toISOString();
-	const item = {
-		id: `dev-${Date.now()}`,
-		userId,
-		deviceCode,
-		displayName,
-		secretHash: hashSecret(deviceSecret),
-		tokenHash: null,
-		thresholdMoisture: Number(thresholdMoisture),
-		mode,
-		minPumpOffSec: Number(minPumpOffSec),
-		maxPumpOnSec: Number(maxPumpOnSec),
-		isActive: true,
-		lastSeenAt: null,
-		createdAt: now,
-	};
-
-	devicesStore.push(item);
-	return item;
 }
 
-export function updateDeviceByOwner(userId, deviceId, payload) {
-	const device = devicesStore.find((d) => d.id === deviceId && d.userId === userId);
-	if (!device) {
-		return null;
-	}
+export async function updateDeviceByOwner(userId, deviceId, payload) {
+	try {
+		const device = await pool.query(
+			"SELECT id FROM devices WHERE id = $1 AND user_id = $2",
+			[deviceId, userId]
+		);
 
-	const { displayName, thresholdMoisture, isActive, mode, minPumpOffSec, maxPumpOnSec } = payload;
+		if (device.rows.length === 0) {
+			return null;
+		}
 
-	if (displayName !== undefined) {
-		device.displayName = displayName;
-	}
-	if (thresholdMoisture !== undefined) {
-		device.thresholdMoisture = Number(thresholdMoisture);
-	}
-	if (isActive !== undefined) {
-		device.isActive = Boolean(isActive);
-	}
-	if (mode !== undefined) {
-		device.mode = mode;
-	}
-	if (minPumpOffSec !== undefined) {
-		device.minPumpOffSec = Number(minPumpOffSec);
-	}
-	if (maxPumpOnSec !== undefined) {
-		device.maxPumpOnSec = Number(maxPumpOnSec);
-	}
+		const { displayName, thresholdMoisture, isActive, mode, minPumpOffSec, maxPumpOnSec } = payload;
 
-	return device;
+		const updates = [];
+		const values = [];
+		let paramNum = 1;
+
+		if (displayName !== undefined) {
+			updates.push(`display_name = $${paramNum++}`);
+			values.push(displayName);
+		}
+		if (thresholdMoisture !== undefined) {
+			updates.push(`threshold_moisture = $${paramNum++}`);
+			values.push(Number(thresholdMoisture));
+		}
+		if (isActive !== undefined) {
+			updates.push(`is_active = $${paramNum++}`);
+			values.push(Boolean(isActive));
+		}
+		if (mode !== undefined) {
+			updates.push(`mode = $${paramNum++}`);
+			values.push(mode);
+		}
+		if (minPumpOffSec !== undefined) {
+			updates.push(`min_pump_off_sec = $${paramNum++}`);
+			values.push(Number(minPumpOffSec));
+		}
+		if (maxPumpOnSec !== undefined) {
+			updates.push(`max_pump_on_sec = $${paramNum++}`);
+			values.push(Number(maxPumpOnSec));
+		}
+
+		if (updates.length === 0) {
+			return await getDeviceById(deviceId);
+		}
+
+		// Add deviceId as the last parameter
+		values.push(deviceId);
+		values.push(userId);
+
+		const query = `UPDATE devices SET ${updates.join(", ")} WHERE id = $${paramNum} AND user_id = $${paramNum + 1} RETURNING id, user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec, is_active, created_at`;
+
+		const result = await pool.query(query, values);
+		return result.rows[0] || null;
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function deleteDeviceByOwner(userId, deviceId) {
-	const index = devicesStore.findIndex((d) => d.id === deviceId && d.userId === userId);
-	if (index < 0) {
-		return false;
+export async function deleteDeviceByOwner(userId, deviceId) {
+	try {
+		const result = await pool.query(
+			"DELETE FROM devices WHERE id = $1 AND user_id = $2 RETURNING id",
+			[deviceId, userId]
+		);
+		return result.rows.length > 0;
+	} catch (error) {
+		throw error;
 	}
-	devicesStore.splice(index, 1);
-	return true;
 }
 
-export function getOwnedDevice(userId, deviceId) {
-	return devicesStore.find((d) => d.id === deviceId && d.userId === userId) || null;
+export async function getOwnedDevice(userId, deviceId) {
+	try {
+		const result = await pool.query(
+			"SELECT id, user_id, device_code, display_name, device_secret_hash, threshold_moisture, mode, min_pump_off_sec, max_pump_on_sec, is_active, created_at FROM devices WHERE id = $1 AND user_id = $2",
+			[deviceId, userId]
+		);
+		const device = result.rows[0];
+		if (device) {
+			const statusResult = await pool.query(
+				"SELECT last_seen_at FROM device_status WHERE device_id = $1",
+				[deviceId]
+			);
+			device.last_seen_at = statusResult.rows[0]?.last_seen_at || null;
+		}
+		return device || null;
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function createCommandForDevice(deviceId, payload) {
-	const now = new Date().toISOString();
-	const command = {
-		id: `cmd_${Date.now()}`,
-		deviceId,
-		type: payload.type,
-		durationSec: payload.durationSec ? Number(payload.durationSec) : null,
-		status: "QUEUED",
-		issuedAt: now,
-		deliveredAt: null,
-		resultAt: null,
-		detail: null,
-	};
+export async function createCommandForDevice(deviceId, payload) {
+	try {
+		const commandId = `cmd_${Date.now()}`;
+		const now = new Date().toISOString();
 
-	commandsStore.push(command);
-	return command;
+		const result = await pool.query(
+			"INSERT INTO commands(id, device_id, type, duration_sec, status, issued_at) VALUES($1, $2, $3, $4, $5, $6) RETURNING id, device_id, type, duration_sec, status, issued_at, delivered_at, result_at, detail",
+			[commandId, deviceId, payload.type, payload.durationSec || null, "QUEUED", now]
+		);
+
+		const command = result.rows[0];
+		return {
+			id: command.id,
+			deviceId: command.device_id,
+			type: command.type,
+			durationSec: command.duration_sec,
+			status: command.status,
+			issuedAt: command.issued_at,
+			deliveredAt: command.delivered_at,
+			resultAt: command.result_at,
+			detail: command.detail,
+		};
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function listCommandsForDevice(deviceId, status) {
-	return commandsStore
-		.filter((c) => c.deviceId === deviceId)
-		.filter((c) => (status ? c.status === status : true))
-		.sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
+export async function listCommandsForDevice(deviceId, status) {
+	try {
+		let query = "SELECT id, device_id, type, duration_sec, status, issued_at, delivered_at, result_at, detail FROM commands WHERE device_id = $1";
+		const params = [deviceId];
+
+		if (status) {
+			query += " AND status = $2";
+			params.push(status);
+		}
+
+		query += " ORDER BY issued_at DESC";
+
+		const result = await pool.query(query, params);
+		return result.rows.map((cmd) => ({
+			id: cmd.id,
+			deviceId: cmd.device_id,
+			type: cmd.type,
+			durationSec: cmd.duration_sec,
+			status: cmd.status,
+			issuedAt: cmd.issued_at,
+			deliveredAt: cmd.delivered_at,
+			resultAt: cmd.result_at,
+			detail: cmd.detail,
+		}));
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function getIrrigationsForDevice(deviceId) {
-	return irrigationsStore
-		.filter((item) => item.deviceId === deviceId)
-		.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+export async function getIrrigationsForDevice(deviceId) {
+	try {
+		const result = await pool.query(
+			"SELECT id, device_id, started_at, ended_at, duration_sec, moisture_before, moisture_after, reason, created_at FROM irrigation_logs WHERE device_id = $1 ORDER BY started_at DESC",
+			[deviceId]
+		);
+		return result.rows;
+	} catch (error) {
+		throw error;
+	}
 }
 
-export function addIrrigationLog(deviceId, payload) {
-	const now = new Date().toISOString();
-	const item = {
-		id: irrigationIdSeq++,
-		deviceId,
-		startedAt: toIsoOrNow(payload.startedAt),
-		endedAt: toIsoOrNow(payload.endedAt),
-		durationSec: Number(payload.durationSec),
-		moistureBefore: payload.moistureBefore ?? null,
-		moistureAfter: payload.moistureAfter ?? null,
-		reason: payload.reason || "AUTO",
-		createdAt: now,
-	};
-
-	irrigationsStore.push(item);
-	return item;
+export async function addIrrigationLog(deviceId, payload) {
+	try {
+		const result = await pool.query(
+			"INSERT INTO irrigation_logs(device_id, started_at, ended_at, duration_sec, moisture_before, moisture_after, reason) VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING id, device_id, started_at, ended_at, duration_sec, moisture_before, moisture_after, reason, created_at",
+			[
+				deviceId,
+				toIsoOrNow(payload.startedAt),
+				toIsoOrNow(payload.endedAt),
+				Number(payload.durationSec),
+				payload.moistureBefore ?? null,
+				payload.moistureAfter ?? null,
+				payload.reason || "AUTO",
+			]
+		);
+		return result.rows[0];
+	} catch (error) {
+		throw error;
+	}
 }
 
 function getStartDate(range) {
@@ -220,43 +314,38 @@ function getStartDate(range) {
 	return start;
 }
 
-export function getStatsForDevice(deviceId, range = "week", metric = "duration") {
-	const allowedRange = ["day", "week", "month"];
-	const selectedRange = allowedRange.includes(range) ? range : "week";
-	const selectedMetric = metric === "count" ? "count" : "duration";
+export async function getStatsForDevice(deviceId, range = "week", metric = "duration") {
+	try {
+		const allowedRange = ["day", "week", "month"];
+		const selectedRange = allowedRange.includes(range) ? range : "week";
+		const selectedMetric = metric === "count" ? "count" : "duration";
 
-	const start = getStartDate(selectedRange);
-	const logs = getIrrigationsForDevice(deviceId).filter(
-		(item) => new Date(item.startedAt).getTime() >= start.getTime()
-	);
+		const start = getStartDate(selectedRange);
 
-	const buckets = new Map();
-	for (const item of logs) {
-		const key = item.startedAt.slice(0, 10);
-		const current = buckets.get(key) || 0;
-		const delta = selectedMetric === "duration" ? Number(item.durationSec) / 60 : 1;
-		buckets.set(key, current + delta);
-	}
+		let query = "SELECT started_at, duration_sec FROM irrigation_logs WHERE device_id = $1 AND started_at >= $2 ORDER BY started_at ASC";
+		const result = await pool.query(query, [deviceId, start.toISOString()]);
 
-	const series = [...buckets.entries()]
-		.sort((a, b) => a[0].localeCompare(b[0]))
-		.map(([bucket, value]) => ({
-			bucket,
-			value: selectedMetric === "duration" ? Number(value.toFixed(2)) : value,
-		}));
+		const buckets = new Map();
+		for (const item of result.rows) {
+			const key = item.started_at.slice(0, 10);
+			const current = buckets.get(key) || 0;
+			const delta = selectedMetric === "duration" ? Number(item.duration_sec) / 60 : 1;
+			buckets.set(key, current + delta);
+		}
 
-	return {
-		range: selectedRange,
-		metric: selectedMetric,
-		unit: selectedMetric === "duration" ? "minutes" : "count",
-		series,
-	};
-}
+		const series = [...buckets.entries()]
+			.sort((a, b) => a[0].localeCompare(b[0]))
+			.map(([bucket, value]) => ({
+				bucket,
+				value: selectedMetric === "duration" ? Number(value.toFixed(2)) : value,
+			}));
 
-export function getStores() {
-	return {
-		devicesStore,
-		commandsStore,
-		irrigationsStore,
-	};
-}
+		return {
+			range: selectedRange,
+			metric: selectedMetric,
+			unit: selectedMetric === "duration" ? "minutes" : "count",
+			series,
+		};
+	} catch (error) {
+		throw error;
+	}}

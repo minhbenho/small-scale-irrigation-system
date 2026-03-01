@@ -12,14 +12,14 @@ import {
 } from "../services/devices.service.js";
 
 // GET /api/devices
-export const listDevices = (req, res) => {
+export const listDevices = async (req, res) => {
   const userId = req.user.id;
-  const items = listDevicesByUser(userId);
+  const items = await listDevicesByUser(userId);
   return res.status(200).json(items);
 };
 
 // POST /api/devices
-export const addDevice = (req, res) => {
+export const addDevice = async (req, res) => {
   const { deviceCode, displayName, deviceSecret } = req.body;
 
   if (!deviceCode || !displayName || !deviceSecret) {
@@ -31,7 +31,7 @@ export const addDevice = (req, res) => {
 
   let newDevice;
   try {
-    newDevice = addDeviceService(req.user.id, req.body);
+    newDevice = await addDeviceService(req.user.id, req.body);
   } catch (error) {
     return res.status(409).json({
       message: error.message,
@@ -41,30 +41,37 @@ export const addDevice = (req, res) => {
 
   return res.status(201).json({
     id: newDevice.id,
-    deviceCode: newDevice.deviceCode,
+    deviceCode: newDevice.device_code,
   });
 };
 
 // PATCH /api/devices/:deviceId
-export const updateDevice = (req, res) => {
-  const { deviceId } = req.params;
-  const device = updateDeviceByOwner(req.user.id, deviceId, req.body);
+export const updateDevice = async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const device = await updateDeviceByOwner(req.user.id, deviceId, req.body);
 
-  if (!device) {
-    return res.status(404).json({
-      message: "Device not found",
-      code: "NOT_FOUND",
+    if (!device) {
+      return res.status(404).json({
+        message: "Device not found",
+        code: "NOT_FOUND",
+      });
+    }
+
+    return res.status(200).json(toDeviceView(device));
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+      code: "UPDATE_FAILED",
     });
   }
-
-  return res.status(200).json(toDeviceView(device));
 };
 
 // DELETE /api/devices/:deviceId
-export const deleteDevice = (req, res) => {
+export const deleteDevice = async (req, res) => {
   const { deviceId } = req.params;
 
-  const deleted = deleteDeviceByOwner(req.user.id, deviceId);
+  const deleted = await deleteDeviceByOwner(req.user.id, deviceId);
   if (!deleted) {
     return res.status(404).json({
       message: "Device not found",
@@ -78,11 +85,11 @@ export const deleteDevice = (req, res) => {
 };
 
 // GET /api/devices/:deviceId/irrigations
-export const listIrrigations = (req, res) => {
+export const listIrrigations = async (req, res) => {
   const { deviceId } = req.params;
   const { limit = 50, offset = 0 } = req.query;
 
-  const device = getOwnedDevice(req.user.id, deviceId);
+  const device = await getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -91,7 +98,7 @@ export const listIrrigations = (req, res) => {
     });
   }
 
-  const all = getIrrigationsForDevice(device.id);
+  const all = await getIrrigationsForDevice(device.id);
   const safeOffset = Number(offset) || 0;
   const safeLimit = Number(limit) || 50;
   const items = all.slice(safeOffset, safeOffset + safeLimit);
@@ -103,11 +110,11 @@ export const listIrrigations = (req, res) => {
 };
 
 // GET /api/devices/:deviceId/stats
-export const getStats = (req, res) => {
+export const getStats = async (req, res) => {
   const { deviceId } = req.params;
   const { range = "week", metric = "duration" } = req.query;
 
-  const device = getOwnedDevice(req.user.id, deviceId);
+  const device = await getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -116,15 +123,16 @@ export const getStats = (req, res) => {
     });
   }
 
-  return res.status(200).json(getStatsForDevice(device.id, range, metric));
+  const stats = await getStatsForDevice(device.id, range, metric);
+  return res.status(200).json(stats);
 };
 
 // POST /api/devices/:deviceId/commands
-export const createCommand = (req, res) => {
+export const createCommand = async (req, res) => {
   const { deviceId } = req.params;
   const { type, durationSec } = req.body;
 
-  const device = getOwnedDevice(req.user.id, deviceId);
+  const device = await getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -140,7 +148,7 @@ export const createCommand = (req, res) => {
     });
   }
 
-  const command = createCommandForDevice(device.id, { type, durationSec });
+  const command = await createCommandForDevice(device.id, { type, durationSec });
 
   return res.status(201).json({
     commandId: command.id,
@@ -149,11 +157,11 @@ export const createCommand = (req, res) => {
 };
 
 // GET /api/devices/:deviceId/commands
-export const listCommands = (req, res) => {
+export const listCommands = async (req, res) => {
   const { deviceId } = req.params;
   const { status } = req.query;
 
-  const device = getOwnedDevice(req.user.id, deviceId);
+  const device = await getOwnedDevice(req.user.id, deviceId);
 
   if (!device) {
     return res.status(404).json({
@@ -162,5 +170,6 @@ export const listCommands = (req, res) => {
     });
   }
 
-  return res.status(200).json(listCommandsForDevice(device.id, status));
+  const commands = await listCommandsForDevice(device.id, status);
+  return res.status(200).json(commands);
 };

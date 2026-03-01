@@ -2,104 +2,123 @@ import {
 	addIrrigationLog,
 	getDeviceByCode,
 	listCommandsForDevice,
-	getStores,
 } from "./devices.service.js";
 import { compareHashedSecret } from "../utils/hash.js";
+import { pool } from "../db.js";
 
-export function authenticateDeviceByHeaders(deviceCode, rawSecret, rawToken) {
+export async function authenticateDeviceByHeaders(deviceCode, rawSecret, rawToken) {
 	if (!deviceCode) {
 		return { ok: false, reason: "missing_device_code" };
 	}
 
-	const device = getDeviceByCode(deviceCode);
-	if (!device || !device.isActive) {
-		return { ok: false, reason: "device_not_found" };
+	try {
+		const device = await getDeviceByCode(deviceCode);
+		if (!device || !device.is_active) {
+			return { ok: false, reason: "device_not_found" };
+		}
+
+		const secretMatches = rawSecret
+			? compareHashedSecret(rawSecret, device.device_secret_hash)
+			: false;
+
+		if (!secretMatches) {
+			return { ok: false, reason: "invalid_credentials" };
+		}
+
+		return { ok: true, device };
+	} catch (error) {
+		return { ok: false, reason: "auth_error" };
 	}
-
-	const tokenMatches = rawToken
-		? compareHashedSecret(rawToken, device.tokenHash)
-		: false;
-	const secretMatches = rawSecret
-		? compareHashedSecret(rawSecret, device.secretHash)
-		: false;
-
-	if (!tokenMatches && !secretMatches) {
-		return { ok: false, reason: "invalid_credentials" };
-	}
-
-	return { ok: true, device };
 }
 
-export function updateHeartbeat(device, body) {
-	device.lastSeenAt = new Date().toISOString();
-	if (body?.fwVersion !== undefined) {
-		device.fwVersion = body.fwVersion;
-	}
-	if (body?.ip !== undefined) {
-		device.ip = body.ip;
-	}
+export async function updateHeartbeat(device, body) {
+	try {
+		const now = new Date().toISOString();
+		await pool.query(
+			"INSERT INTO device_status(device_id, last_seen_at, ip, fw_version) VALUES($1, $2, $3, $4) ON CONFLICT(device_id) DO UPDATE SET last_seen_at=$2, ip=$3, fw_version=$4, updated_at=now()",
+			[device.id, now, body?.ip || null, body?.fwVersion || null]
+		);
 
-	return {
-		ok: true,
-		serverTime: new Date().toISOString(),
-	};
+		return {
+			ok: true,
+			serverTime: now,
+		};
+	} catch (error) {
+		console.error("[IoT] Heartbeat error:", error.message);
+		throw error;
+	}
 }
 
-export function saveIrrigation(device, payload) {
-	const log = addIrrigationLog(device.id, payload);
-	return {
-		ok: true,
-		logId: log.id,
-	};
+export async function saveIrrigation(device, payload) {
+	try {
+		const log = await addIrrigationLog(device.id, payload);
+		return {
+			ok: true,
+			logId: log.id,
+		};
+	} catch (error) {
+		console.error("[IoT] Save irrigation error:", error.message);
+		throw error;
+	}
 }
 
-export function pullConfig(device) {
+export async function pullConfig(device) {
 	return {
-		thresholdMoisture: device.thresholdMoisture,
+		thresholdMoisture: device.threshold_moisture,
 		mode: device.mode || "AUTO",
-		minPumpOffSec: device.minPumpOffSec ?? 300,
-		maxPumpOnSec: device.maxPumpOnSec ?? 120,
+		minPumpOffSec: device.min_pump_off_sec ?? 300,
+		maxPumpOnSec: device.max_pump_on_sec ?? 120,
 	};
 }
 
-export function pullCommand(device, ack = false) {
-	const pending = listCommandsForDevice(device.id, "QUEUED")[0] || null;
-	if (!pending) {
-		return { command: null };
-	}
+export async function pullCommand(device, ack = false) {
+	try {
+		const commands = await listCommandsForDevice(device.id, "QUEUED");
+		const pending = commands[0] || null;
 
-	if (ack) {
-		pending.status = "DELIVERED";
-		pending.deliveredAt = new Date().toISOString();
-	}
+		if (!pending) {
+			return { command: null };
+		}
 
-	return {
-		command: {
-			id: pending.id,
-			type: pending.type,
-			durationSec: pending.durationSec,
-			issuedAt: pending.issuedAt,
-		},
-	};
+		if (ack) {
+			await pool.query(
+				"UPDATE commands SET status=$1, delivered_at=$2 WHERE id=$3",
+				["DELIVERED", new Date().toISOString(), pending.id]
+			);
+		}
+
+		return {
+			command: {
+				id: pending.id,
+				type: pending.type,
+				durationSec: pending.durationSec,
+				issuedAt: pending.issuedAt,
+			},
+		};
+	} catch (error) {
+		console.error("[IoT] Pull command error:", error.message);
+		throw error;
+	}
 }
 
-export function saveCommandResult(device, commandId, payload) {
-	const { commandsStore } = getStores();
-	const command = commandsStore.find(
-		(item) => item.id === commandId && item.deviceId === device.id
-	);
+export async function saveCommandResult(device, commandId, payload) {
+	try {
+		const result = await pool.query(
+			"UPDATE commands SET status=$1, detail=$2, result_at=$3 WHERE id=$4 AND device_id=$5 RETURNING id, status",
+			[payload?.status || "DONE", payload?.detail || null, new Date().toISOString(), commandId, device.id]
+		);
 
-	if (!command) {
-		return { notFound: true };
+		if (result.rows.length === 0) {
+			return { notFound: true };
+		}
+
+		return {
+			ok: true,
+			commandId: result.rows[0].id,
+			status: result.rows[0].status,
+		};
+	} catch (error) {
+		console.error("[IoT] Save command result error:", error.message);
+		throw error;
 	}
-
-	command.status = payload?.status || "DONE";
-	command.detail = payload?.detail || null;
-	command.resultAt = new Date().toISOString();
-
-	return {
-		ok: true,
-		commandId: command.id,
-		status: command.status,
-	};
 }
