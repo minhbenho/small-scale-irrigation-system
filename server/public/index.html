@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Irrigation Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section id="auth-view" class="card">
+        <h1>Small-Scale Irrigation</h1>
+        <p class="muted">Đăng nhập để quản lý thiết bị tưới</p>
+
+        <div class="tabs" role="tablist" aria-label="Auth tabs">
+          <button id="tab-login" class="tab active" type="button">Đăng nhập</button>
+          <button id="tab-register" class="tab" type="button">Đăng ký</button>
+        </div>
+
+        <form id="login-form" class="form" autocomplete="on">
+          <label>Email</label>
+          <input name="email" type="email" required placeholder="minh@example.com" />
+          <label>Mật khẩu</label>
+          <input name="password" type="password" required placeholder="******" />
+          <button type="submit">Đăng nhập</button>
+        </form>
+
+        <form id="register-form" class="form hidden" autocomplete="on">
+          <label>Tên</label>
+          <input name="name" type="text" required placeholder="Minh" />
+          <label>Email</label>
+          <input name="email" type="email" required placeholder="minh@example.com" />
+          <label>Mật khẩu</label>
+          <input name="password" type="password" required placeholder="******" />
+          <button type="submit">Tạo tài khoản</button>
+        </form>
+
+        <p id="auth-message" class="message"></p>
+      </section>
+
+      <section id="dashboard-view" class="hidden">
+        <header class="header card">
+          <div>
+            <h2>Irrigation Dashboard</h2>
+            <p id="welcome" class="muted"></p>
+          </div>
+          <button id="logout-btn" class="secondary" type="button">Đăng xuất</button>
+        </header>
+
+        <section class="card">
+          <div class="row">
+            <label for="device-select">Thiết bị</label>
+            <select id="device-select"></select>
+            <button id="refresh-btn" type="button" class="secondary">Làm mới</button>
+          </div>
+          <p id="device-status" class="muted"></p>
+          <button id="delete-device-btn" class="danger" type="button" style="margin-top: 8px;">Xóa thiết bị này</button>
+        </section>
+
+        <section class="card">
+          <h3>Thêm thiết bị mới</h3>
+          <form id="add-device-form" class="form compact">
+            <label>Mã thiết bị</label>
+            <input name="deviceCode" type="text" required placeholder="esp32-02" />
+            <label>Tên thiết bị</label>
+            <input name="displayName" type="text" required placeholder="Chậu hoa" />
+            <label>Mã bí mật</label>
+            <input name="deviceSecret" type="password" required placeholder="abc123secure" />
+            <button type="submit">Thêm thiết bị</button>
+          </form>
+          <p id="add-device-message" class="message"></p>
+        </section>
+
+        <section class="grid">
+          <article class="card">
+            <h3>Cấu hình</h3>
+            <form id="config-form" class="form compact">
+              <label>Tên thiết bị</label>
+              <input name="displayName" type="text" required />
+              <label>Mode</label>
+              <select name="mode" required>
+                <option value="AUTO">AUTO</option>
+                <option value="MANUAL">MANUAL</option>
+              </select>
+              <label>Ngưỡng ẩm (%)</label>
+              <input name="thresholdMoisture" type="number" min="0" max="100" required />
+              <button type="submit">Lưu cấu hình</button>
+            </form>
+          </article>
+
+          <article class="card">
+            <h3>Điều khiển bơm</h3>
+            <form id="pump-form" class="form compact">
+              <label>Thời gian chạy (giây)</label>
+              <input name="durationSec" type="number" min="1" value="20" required />
+              <button type="submit">Bật bơm</button>
+            </form>
+            <button id="pump-off-btn" class="danger" type="button">Tắt bơm</button>
+          </article>
+        </section>
+
+        <section class="card">
+          <h3>Lịch sử tưới gần nhất</h3>
+          <ul id="irrigation-list" class="list"></ul>
+        </section>
+
+        <section class="card">
+          <h3>Lệnh gần nhất</h3>
+          <ul id="command-list" class="list"></ul>
+        </section>
+
+        <p id="dashboard-message" class="message"></p>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

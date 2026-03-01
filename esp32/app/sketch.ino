@@ -19,7 +19,7 @@ void loop(){
   if (hasIncomingConfig) {
     currentConfig = incomingConfig;
     hasIncomingConfig = false;
-    Serial.println("✅ CONFIG SWITCHED");
+    Serial.println("CONFIG SWITCHED");
   }
   pumpProcess(now, soilValue);
   wifiProcess(now);
